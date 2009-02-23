@@ -126,7 +126,10 @@
 
 #elif defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__)
 
-#  define ZT_MACOS
+//#  define ZT_MACOS
+// Use POSIX threading model for OS X instead of Carbon Core Services. As recommended by Apple.
+// http://developer.apple.com/documentation/Carbon/Reference/Thread_Manager/Reference/reference.html
+#  define ZT_POSIX
 
 #else
 #  error "Could not select implementation, define ZT_WIN9X, ZT_WIN32, ZT_POSIX or ZT_MACOS"

@@ -29,7 +29,9 @@
 #  define PLATFORM PLATFORM_WINDOWS
 #elif defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 )
 #  define PLATFORM PLATFORM_WINDOWS
-#elif defined( __APPLE_CC__ )
+// Use appropriate macros as suggested by Apple.
+// http://developer.apple.com/technotes/tn2002/tn2071.html#Section10
+#elif defined( __APPLE__ ) && defined( __MACH__ )
 #  define PLATFORM PLATFORM_APPLE
 #elif defined( __INTEL_COMPILER )
 #  define PLATFORM PLATFORM_INTEL

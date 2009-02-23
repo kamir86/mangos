@@ -20,7 +20,7 @@
  *
  */
 
-#include "zthread/Time.h"
+#include "zthread/_Time.h"
 #include "TimeStrategy.h"
 
 

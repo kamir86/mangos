@@ -162,7 +162,9 @@ typedef in_port_t port_t;
 // Mac OS X
 #include <string.h>
 #ifdef __DARWIN_UNIX03
-typedef unsigned short port_t;
+#ifndef port_t
+typedef mach_port_t port_t;
+#endif
 #else
 #include <mach/port.h>
 #endif // __DARWIN_UNIX03

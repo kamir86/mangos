@@ -53,12 +53,18 @@
 #  define MANGOS_LOAD_LIBRARY(a) dlopen(a,RTLD_NOW)
 #  define MANGOS_CLOSE_LIBRARY dlclose
 #  define MANGOS_GET_PROC_ADDR dlsym
-#  if defined(__APPLE_CC__) && defined(BIG_ENDIAN)
+// cdecl calling convention is only supported on intel compilers
+#  if MANGOS_ENDIAN == MANGOS_BIGENDIAN
 #    define MANGOS_IMPORT __attribute__ ((longcall))
-#  else
+#  else  //MANGOS_ENDIAN != MANGOS_BIGENDIAN
 #    define MANGOS_IMPORT __attribute__ ((cdecl))
-#  endif //__APPLE_CC__ && BIG_ENDIAN
-#  define MANGOS_SCRIPT_EXT ".so"
+#  endif //MANGOS_ENDIAN
+// OS X uses .dylib as the dynamic library file name suffix
+#  if PLATFORM == PLATFORM_APPLE
+#    define MANGOS_SCRIPT_EXT ".dylib"
+#  else //PLATFORM != PLATFORM_APPLE
+#    define MANGOS_SCRIPT_EXT ".so"
+#  endif //MANGOS_SCRIPT_EXT
 #  define MANGOS_SCRIPT_NAME "libmangosscript"
 #  define MANGOS_PATH_MAX PATH_MAX
 #endif //PLATFORM

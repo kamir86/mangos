@@ -61,8 +61,12 @@
 # endif
 # define _MANGOSD_CONFIG  SYSCONFDIR"mangosd.conf"
 # define _REALMD_CONFIG   SYSCONFDIR"realmd.conf"
-#else
-# define _ENDIAN_PLATFORM "Unix (" _ENDIAN_STRING ")"
+#else //PLATFORM != PLATFORM_WINDOWS
+# if PLATFORM == PLATFORM_APPLE
+#  define _ENDIAN_PLATFORM "Darwin (" _ENDIAN_STRING ")"
+# else
+#  define _ENDIAN_PLATFORM "Unix (" _ENDIAN_STRING ")"
+# endif
 # define _MANGOSD_CONFIG  SYSCONFDIR"mangosd.conf"
 # define _REALMD_CONFIG  SYSCONFDIR"realmd.conf"
 #endif

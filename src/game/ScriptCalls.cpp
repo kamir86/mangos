@@ -47,6 +47,17 @@ bool LoadScriptingModule(char const* libName)
 
     testScript->hScriptsLib=MANGOS_LOAD_LIBRARY(name.c_str());
 
+#if PLATFORM == PLATFORM_APPLE
+    if(!testScript->hScriptsLib )
+    {
+        // library was not found within standard dynamic loader search paths $HOME/lib; /usr/local/lib; /usr/lib
+        // try relative path instead for those who install into non-nonstandard directory
+        std::string fullPath = "@executable_path/../lib/";
+        fullPath += name;
+        testScript->hScriptsLib=MANGOS_LOAD_LIBRARY(fullPath.c_str());
+    }
+#endif
+
     if(!testScript->hScriptsLib )
     {
         printf("Error loading Scripts Library %s !\n",name.c_str());

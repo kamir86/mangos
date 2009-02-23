@@ -385,7 +385,7 @@ int UdpSocket::ReadTS(char *ioBuf, int inBufSize, struct sockaddr *from, socklen
 	union {
 		struct cmsghdr cm;
 #ifdef MACOSX
-#ifdef __DARWIN_UNIX03
+#if defined( __DARWIN_UNIX03 ) && defined( __DARWIN_ALIGNBYTES )
 #define ALIGNBYTES __DARWIN_ALIGNBYTES
 #endif
 #define myALIGN(p) (((unsigned int)(p) + ALIGNBYTES) &~ ALIGNBYTES)
