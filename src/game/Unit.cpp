@@ -473,6 +473,17 @@ uint32 Unit::DealDamage(Unit *pVictim, uint32 damage, CleanDamage const* cleanDa
             return 0;
     }
 
+	//remove SPELL_INTERRUPT_FLAG_TURNING
+	for (uint32 i = CURRENT_FIRST_NON_MELEE_SPELL; i < CURRENT_MAX_SPELL; i++)
+    {
+        if (pVictim->m_currentSpells[i])
+        {
+            // check if we can interrupt spell
+            if ( pVictim->m_currentSpells[i]->m_spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_TURNING )
+                pVictim->InterruptSpell(i,false);
+        }
+	}
+	
     // remove affects from victim (including from 0 damage and DoTs)
     if(pVictim != this)
         pVictim->RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH);
