@@ -7299,7 +7299,9 @@ bool Unit::HandleProcTriggerSpell(Unit *pVictim, uint32 damage, Aura* triggeredB
              // Rain of Fire have 4 tick
              else if (procSpell->SpellFamilyFlags&0x0000000000000020LL)
                  tick = 4;
-             else
+             // Soul fire no tick (default tick=1)
+	     else if (procSpell->SpellFamilyFlags&0x8000000000LL);
+	     else
                  return false;
 
              // Calculate chance = baseChance / tick
