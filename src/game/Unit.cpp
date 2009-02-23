@@ -8747,7 +8747,7 @@ uint32 Unit::SpellDamageBonus(Unit *pVictim, SpellEntry const *spellProto, uint3
                 CastingTime = 175;
             }
             // Blessing of Sanctuary - 0%
-            else if ((spellProto->SpellFamilyFlags & 0x10000000LL) && spellProto->SpellIconID == 29)
+            else if ((spellProto->SpellFamilyFlags & 0x0010000000) && spellProto->SpellIconID == 19)
             {
                 CastingTime = 0;
             }
@@ -9044,6 +9044,10 @@ uint32 Unit::SpellHealingBonus(SpellEntry const *spellProto, uint32 healamount, 
 		case SPELLFAMILY_POTION:
 			return healamount;
 			break;
+        case SPELLFAMILY_PRIEST:
+            if ( ( spellProto->SpellFamilyFlags & 0x0000100000000000 ) && ( spellProto->SpellIconID == 1875 ) )
+            return healamount;
+            break;
 		default: break;
 	}
 	if (spellProto->Id == 33778 || spellProto->Id == 379   ||
