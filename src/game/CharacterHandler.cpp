@@ -29,7 +29,6 @@
 #include "Guild.h"
 #include "UpdateMask.h"
 #include "Auth/md5.h"
-#include "MapManager.h"
 #include "ObjectAccessor.h"
 #include "Group.h"
 #include "Database/DatabaseImpl.h"
@@ -369,7 +368,7 @@ void WorldSession::HandleCharCreateOpcode( WorldPacket & recv_data )
         return;
     }
 
-    if(have_same_race && skipCinematics == 1 || skipCinematics == 2)
+    if ((have_same_race && skipCinematics == 1) || skipCinematics == 2)
         pNewChar->setCinematic(1);                          // not show intro
 
     // Player created, save it now

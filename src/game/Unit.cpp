@@ -43,6 +43,7 @@
 #include "GridNotifiersImpl.h"
 #include "CellImpl.h"
 #include "Path.h"
+#include "Traveller.h"
 
 #include <math.h>
 
@@ -307,31 +308,26 @@ void Unit::SendMonsterMoveWithSpeedToCurrentDestination(Player* player)
 {
     float x, y, z;
     if(GetMotionMaster()->GetDestination(x, y, z))
-        SendMonsterMoveWithSpeed(x, y, z, GetUnitMovementFlags(), 0, player);
+        SendMonsterMoveWithSpeed(x, y, z, 0, player);
 }
 
-void Unit::SendMonsterMoveWithSpeed(float x, float y, float z, uint32 MovementFlags, uint32 transitTime, Player* player)
+void Unit::SendMonsterMoveWithSpeed(float x, float y, float z, uint32 transitTime, Player* player)
 {
     if (!transitTime)
     {
-        float dx = x - GetPositionX();
-        float dy = y - GetPositionY();
-        float dz = z - GetPositionZ();
-
-        float dist = ((dx*dx) + (dy*dy) + (dz*dz));
-        if(dist<0)
-            dist = 0;
+        if(GetTypeId()==TYPEID_PLAYER)
+        {
+            Traveller<Player> traveller(*(Player*)this);
+            transitTime = traveller.GetTotalTrevelTimeTo(x,y,z);
+        }
         else
-            dist = sqrt(dist);
-
-        double speed = GetSpeed((MovementFlags & MOVEMENTFLAG_WALK_MODE) ? MOVE_WALK : MOVE_RUN);
-        if(speed<=0)
-            speed = 2.5f;
-        speed *= 0.001f;
-        transitTime = static_cast<uint32>(dist / speed + 0.5);
+        {
+            Traveller<Creature> traveller(*(Creature*)this);
+            transitTime = traveller.GetTotalTrevelTimeTo(x,y,z);
+        }
     }
     //float orientation = (float)atan2((double)dy, (double)dx);
-    SendMonsterMove(x, y, z, 0, MovementFlags, transitTime, player);
+    SendMonsterMove(x, y, z, 0, GetUnitMovementFlags(), transitTime, player);
 }
 
 void Unit::SendMonsterMove(float NewPosX, float NewPosY, float NewPosZ, uint8 type, uint32 MovementFlags, uint32 Time, Player* player)
@@ -978,7 +974,7 @@ void Unit::CastCustomSpell(Unit* Victim,uint32 spellId, int32 const* bp0, int32 
 
     if(!spellInfo)
     {
-        sLog.outError("CastCustomSpell: unknown spell id %i\n", spellId);
+        sLog.outError("CastCustomSpell: unknown spell id %i", spellId);
         return;
     }
 
@@ -3787,7 +3783,7 @@ void Unit::_UpdateAutoRepeatSpell()
     if (isAttackReady(RANGED_ATTACK))
     {
         // Check if able to cast
-        if(m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->CanCast(true))
+        if(m_currentSpells[CURRENT_AUTOREPEAT_SPELL]->CheckCast(true) != SPELL_CAST_OK)
         {
             InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
             return;
@@ -4525,7 +4521,7 @@ void Unit::RemoveAurasDueToSpellBySteal(uint32 spellId, uint64 casterGUID, Unit 
             // set its duration and maximum duration
             // max duration 2 minutes (in msecs)
             int32 dur = aur->GetAuraDuration();
-            const int32 max_dur = 2*MINUTE*1000;
+            const int32 max_dur = 2*MINUTE*IN_MILISECONDS;
             new_aur->SetAuraMaxDuration( max_dur > dur ? dur : max_dur );
             new_aur->SetAuraDuration( max_dur > dur ? dur : max_dur );
 
@@ -4808,7 +4804,7 @@ void Unit::RemoveDynObject(uint32 spellid)
         return;
     for (DynObjectGUIDs::iterator i = m_dynObjGUIDs.begin(); i != m_dynObjGUIDs.end();)
     {
-        DynamicObject* dynObj = ObjectAccessor::GetDynamicObject(*this,*m_dynObjGUIDs.begin());
+        DynamicObject* dynObj = ObjectAccessor::GetDynamicObject(*this,*i);
         if(!dynObj)
         {
             i = m_dynObjGUIDs.erase(i);
@@ -4838,7 +4834,7 @@ DynamicObject * Unit::GetDynObject(uint32 spellId, uint32 effIndex)
 {
     for (DynObjectGUIDs::iterator i = m_dynObjGUIDs.begin(); i != m_dynObjGUIDs.end();)
     {
-        DynamicObject* dynObj = ObjectAccessor::GetDynamicObject(*this,*m_dynObjGUIDs.begin());
+        DynamicObject* dynObj = ObjectAccessor::GetDynamicObject(*this,*i);
         if(!dynObj)
         {
             i = m_dynObjGUIDs.erase(i);
@@ -4856,7 +4852,7 @@ DynamicObject * Unit::GetDynObject(uint32 spellId)
 {
     for (DynObjectGUIDs::iterator i = m_dynObjGUIDs.begin(); i != m_dynObjGUIDs.end();)
     {
-        DynamicObject* dynObj = ObjectAccessor::GetDynamicObject(*this,*m_dynObjGUIDs.begin());
+        DynamicObject* dynObj = ObjectAccessor::GetDynamicObject(*this,*i);
         if(!dynObj)
         {
             i = m_dynObjGUIDs.erase(i);
@@ -4875,6 +4871,15 @@ void Unit::AddGameObject(GameObject* gameObj)
     assert(gameObj && gameObj->GetOwnerGUID()==0);
     m_gameObj.push_back(gameObj);
     gameObj->SetOwnerGUID(GetGUID());
+
+    if ( GetTypeId()==TYPEID_PLAYER && gameObj->GetSpellId() )
+    {
+        SpellEntry const* createBySpell = sSpellStore.LookupEntry(gameObj->GetSpellId());
+        // Need disable spell use for owner
+        if (createBySpell && createBySpell->Attributes & SPELL_ATTR_DISABLED_WHILE_ACTIVE)
+            // note: item based cooldowns and cooldown spell mods with charges ignored (unknown existed cases)
+            ((Player*)this)->AddSpellAndCategoryCooldowns(createBySpell,0,NULL,true);
+    }
 }
 
 void Unit::RemoveGameObject(GameObject* gameObj, bool del)
@@ -4887,6 +4892,7 @@ void Unit::RemoveGameObject(GameObject* gameObj, bool del)
         SpellEntry const* createBySpell = sSpellStore.LookupEntry(gameObj->GetSpellId());
         // Need activate spell use for owner
         if (createBySpell && createBySpell->Attributes & SPELL_ATTR_DISABLED_WHILE_ACTIVE)
+            // note: item based cooldowns and cooldown spell mods with charges ignored (unknown existed cases)
             ((Player*)this)->SendCooldownEvent(createBySpell);
     }
     gameObj->SetOwnerGUID(0);
@@ -7978,28 +7984,34 @@ bool Unit::IsHostileTo(Unit const* unit) const
     if(tester->GetTypeId()==TYPEID_PLAYER)
     {
         // forced reaction
-        ForcedReactions::const_iterator forceItr = ((Player*)tester)->m_forcedReactions.find(target_faction->faction);
-        if(forceItr!=((Player*)tester)->m_forcedReactions.end())
-            return forceItr->second <= REP_HOSTILE;
+        if(target_faction->faction)
+        {
+            ForcedReactions::const_iterator forceItr = ((Player*)tester)->m_forcedReactions.find(target_faction->faction);
+            if(forceItr!=((Player*)tester)->m_forcedReactions.end())
+                return forceItr->second <= REP_HOSTILE;
 
-        // if faction have reputation then hostile state for tester at 100% dependent from at_war state
-        if(FactionEntry const* raw_target_faction = sFactionStore.LookupEntry(target_faction->faction))
-            if(raw_target_faction->reputationListID >=0)
-                if(FactionState const* factionState = ((Player*)tester)->GetFactionState(raw_target_faction))
-                    return (factionState->Flags & FACTION_FLAG_AT_WAR);
+            // if faction have reputation then hostile state for tester at 100% dependent from at_war state
+            if(FactionEntry const* raw_target_faction = sFactionStore.LookupEntry(target_faction->faction))
+                if(raw_target_faction->reputationListID >=0)
+                    if(FactionState const* factionState = ((Player*)tester)->GetFactionState(raw_target_faction))
+                        return (factionState->Flags & FACTION_FLAG_AT_WAR);
+        }
     }
     // CvP forced reaction and reputation case
     else if(target->GetTypeId()==TYPEID_PLAYER)
     {
         // forced reaction
-        ForcedReactions::const_iterator forceItr = ((Player const*)target)->m_forcedReactions.find(tester_faction->faction);
-        if(forceItr!=((Player const*)target)->m_forcedReactions.end())
-            return forceItr->second <= REP_HOSTILE;
+        if(tester_faction->faction)
+        {
+            ForcedReactions::const_iterator forceItr = ((Player const*)target)->m_forcedReactions.find(tester_faction->faction);
+            if(forceItr!=((Player const*)target)->m_forcedReactions.end())
+                return forceItr->second <= REP_HOSTILE;
 
-        // apply reputation state
-        FactionEntry const* raw_tester_faction = sFactionStore.LookupEntry(tester_faction->faction);
-        if(raw_tester_faction && raw_tester_faction->reputationListID >=0 )
-            return ((Player const*)target)->GetReputationRank(raw_tester_faction) <= REP_HOSTILE;
+            // apply reputation state
+            FactionEntry const* raw_tester_faction = sFactionStore.LookupEntry(tester_faction->faction);
+            if(raw_tester_faction && raw_tester_faction->reputationListID >=0 )
+                return ((Player const*)target)->GetReputationRank(raw_tester_faction) <= REP_HOSTILE;
+        }
     }
 
     // common faction based case (CvC,PvC,CvP)
@@ -8087,28 +8099,34 @@ bool Unit::IsFriendlyTo(Unit const* unit) const
     if(tester->GetTypeId()==TYPEID_PLAYER)
     {
         // forced reaction
-        ForcedReactions::const_iterator forceItr = ((Player const*)tester)->m_forcedReactions.find(target_faction->faction);
-        if(forceItr!=((Player const*)tester)->m_forcedReactions.end())
-            return forceItr->second >= REP_FRIENDLY;
+        if(target_faction->faction)
+        {
+            ForcedReactions::const_iterator forceItr = ((Player const*)tester)->m_forcedReactions.find(target_faction->faction);
+            if(forceItr!=((Player const*)tester)->m_forcedReactions.end())
+                return forceItr->second >= REP_FRIENDLY;
 
-        // if faction have reputation then friendly state for tester at 100% dependent from at_war state
-        if(FactionEntry const* raw_target_faction = sFactionStore.LookupEntry(target_faction->faction))
-            if(raw_target_faction->reputationListID >=0)
-                if(FactionState const* FactionState = ((Player*)tester)->GetFactionState(raw_target_faction))
-                    return !(FactionState->Flags & FACTION_FLAG_AT_WAR);
+            // if faction have reputation then friendly state for tester at 100% dependent from at_war state
+            if(FactionEntry const* raw_target_faction = sFactionStore.LookupEntry(target_faction->faction))
+                if(raw_target_faction->reputationListID >=0)
+                    if(FactionState const* FactionState = ((Player*)tester)->GetFactionState(raw_target_faction))
+                        return !(FactionState->Flags & FACTION_FLAG_AT_WAR);
+        }
     }
     // CvP forced reaction and reputation case
     else if(target->GetTypeId()==TYPEID_PLAYER)
     {
         // forced reaction
-        ForcedReactions::const_iterator forceItr = ((Player const*)target)->m_forcedReactions.find(tester_faction->faction);
-        if(forceItr!=((Player const*)target)->m_forcedReactions.end())
-            return forceItr->second >= REP_FRIENDLY;
+        if(tester_faction->faction)
+        {
+            ForcedReactions::const_iterator forceItr = ((Player const*)target)->m_forcedReactions.find(tester_faction->faction);
+            if(forceItr!=((Player const*)target)->m_forcedReactions.end())
+                return forceItr->second >= REP_FRIENDLY;
 
-        // apply reputation state
-        if(FactionEntry const* raw_tester_faction = sFactionStore.LookupEntry(tester_faction->faction))
-            if(raw_tester_faction->reputationListID >=0 )
-                return ((Player const*)target)->GetReputationRank(raw_tester_faction) >= REP_FRIENDLY;
+            // apply reputation state
+            if(FactionEntry const* raw_tester_faction = sFactionStore.LookupEntry(tester_faction->faction))
+                if(raw_tester_faction->reputationListID >=0 )
+                    return ((Player const*)target)->GetReputationRank(raw_tester_faction) >= REP_FRIENDLY;
+        }
     }
 
     // common faction based case (CvC,PvC,CvP)
@@ -8118,7 +8136,7 @@ bool Unit::IsFriendlyTo(Unit const* unit) const
 bool Unit::IsHostileToPlayers() const
 {
     FactionTemplateEntry const* my_faction = getFactionTemplateEntry();
-    if(!my_faction)
+    if(!my_faction || !my_faction->faction)
         return false;
 
     FactionEntry const* raw_faction = sFactionStore.LookupEntry(my_faction->faction);
@@ -8131,7 +8149,7 @@ bool Unit::IsHostileToPlayers() const
 bool Unit::IsNeutralToAll() const
 {
     FactionTemplateEntry const* my_faction = getFactionTemplateEntry();
-    if(!my_faction)
+    if(!my_faction || !my_faction->faction)
         return true;
 
     FactionEntry const* raw_faction = sFactionStore.LookupEntry(my_faction->faction);
@@ -8170,6 +8188,7 @@ bool Unit::Attack(Unit *victim, bool meleeAttack)
     if(HasAuraType(SPELL_AURA_MOD_UNATTACKABLE))
         RemoveSpellsCausingAura(SPELL_AURA_MOD_UNATTACKABLE);
 
+    // in fighting already
     if (m_attacking)
     {
         if (m_attacking == victim)
@@ -8183,7 +8202,16 @@ bool Unit::Attack(Unit *victim, bool meleeAttack)
             }
             return false;
         }
-        AttackStop();
+
+        // remove old target data
+        AttackStop(true);
+    }
+    // new battle
+    else
+    {
+        // set position before any AI calls/assistance
+        if(GetTypeId()==TYPEID_UNIT)
+            ((Creature*)this)->SetCombatStartPosition(GetPositionX(), GetPositionY(), GetPositionZ());
     }
 
     //Set our target
@@ -8191,10 +8219,6 @@ bool Unit::Attack(Unit *victim, bool meleeAttack)
 
     if(meleeAttack)
         addUnitState(UNIT_STAT_MELEE_ATTACKING);
-
-    // set position before any AI calls/assistance
-    if(GetTypeId()==TYPEID_UNIT)
-        ((Creature*)this)->SetCombatStartPosition(GetPositionX(), GetPositionY(), GetPositionZ());
 
     m_attacking = victim;
     m_attacking->_addAttacker(this);
@@ -8222,7 +8246,7 @@ bool Unit::Attack(Unit *victim, bool meleeAttack)
     return true;
 }
 
-bool Unit::AttackStop()
+bool Unit::AttackStop(bool targetSwitch /*=false*/)
 {
     if (!m_attacking)
         return false;
@@ -8239,11 +8263,9 @@ bool Unit::AttackStop()
 
     InterruptSpell(CURRENT_MELEE_SPELL);
 
-    if( GetTypeId()==TYPEID_UNIT )
-    {
-        // reset call assistance
+    // reset only at real combat stop
+    if(!targetSwitch && GetTypeId()==TYPEID_UNIT )
         ((Creature*)this)->SetNoCallAssistance(false);
-    }
 
     SendAttackStop(victim);
 
@@ -11889,8 +11911,11 @@ Player* Unit::GetSpellModOwner()
 }
 
 ///----------Pet responses methods-----------------
-void Unit::SendPetCastFail(uint32 spellid, uint8 msg)
+void Unit::SendPetCastFail(uint32 spellid, SpellCastResult msg)
 {
+    if(msg == SPELL_CAST_OK)
+        return; 
+
     Unit *owner = GetCharmerOrOwner();
     if(!owner || owner->GetTypeId() != TYPEID_PLAYER)
         return;

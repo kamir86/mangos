@@ -556,7 +556,9 @@ enum DiminishingLevels
 
 struct DiminishingReturn
 {
-    DiminishingReturn(DiminishingGroup group, uint32 t, uint32 count) : DRGroup(group), hitTime(t), hitCount(count), stack(0) {}
+    DiminishingReturn(DiminishingGroup group, uint32 t, uint32 count)
+        : DRGroup(group), stack(0), hitTime(t), hitCount(count)
+    {}
 
     DiminishingGroup        DRGroup:16;
     uint16                  stack:16;
@@ -787,7 +789,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
         }
         bool Attack(Unit *victim, bool meleeAttack);
         void CastStop(uint32 except_spellid = 0);
-        bool AttackStop();
+        bool AttackStop(bool targetSwitch = false);
         void RemoveAllAttackers();
         AttackerSet const& getAttackers() const { return m_attackers; }
         bool isAttackingPlayer() const;
@@ -995,7 +997,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
 
         void SendMonsterMove(float NewPosX, float NewPosY, float NewPosZ, uint8 type, uint32 MovementFlags, uint32 Time, Player* player = NULL);
         void SendMonsterMoveByPath(Path const& path, uint32 start, uint32 end, uint32 MovementFlags);
-        void SendMonsterMoveWithSpeed(float x, float y, float z, uint32 MovementFlags, uint32 transitTime = 0, Player* player = NULL);
+        void SendMonsterMoveWithSpeed(float x, float y, float z, uint32 transitTime = 0, Player* player = NULL);
         void SendMonsterMoveWithSpeedToCurrentDestination(Player* player = NULL);
 
         virtual void MoveOutOfRange(Player &) {  };
@@ -1306,7 +1308,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
         void ClearComboPointHolders();
 
         ///----------Pet responses methods-----------------
-        void SendPetCastFail(uint32 spellid, uint8 msg);
+        void SendPetCastFail(uint32 spellid, SpellCastResult msg);
         void SendPetActionFeedback (uint8 msg);
         void SendPetTalk (uint32 pettalk);
         void SendPetSpellCooldown (uint32 spellid, time_t cooltime);
@@ -1375,6 +1377,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
         uint32 m_unit_movement_flags;
 
         uint32 m_reactiveTimer[MAX_REACTIVE];
+        uint32 m_regenTimer;
 
     private:
         void SendAttackStop(Unit* victim);                  // only from AttackStop(Unit*)

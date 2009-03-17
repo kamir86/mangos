@@ -20,15 +20,11 @@
 #include "Database/DBCStores.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
-#include "World.h"
 #include "ObjectMgr.h"
 #include "SpellMgr.h"
 #include "Log.h"
 #include "Opcodes.h"
 #include "Spell.h"
-#include "SpellAuras.h"
-#include "BattleGround.h"
-#include "MapManager.h"
 #include "ScriptCalls.h"
 #include "Totem.h"
 
@@ -92,7 +88,7 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
 
     if (pUser->isInCombat())
     {
-        for(int i = 0; i < 5; ++i)
+        for(int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
         {
             if (SpellEntry const *spellInfo = sSpellStore.LookupEntry(proto->Spells[i].SpellId))
             {
@@ -148,7 +144,7 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
         // use triggered flag only for items with many spell casts and for not first cast
         int count = 0;
 
-        for(int i = 0; i < 5; ++i)
+        for(int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
         {
             _Spell const& spellData = pItem->GetProto()->Spells[i];
 
@@ -224,7 +220,7 @@ void WorldSession::HandleOpenItemOpcode(WorldPacket& recvPacket)
         }
 
         // required picklocking
-        if(lockInfo->requiredlockskill || lockInfo->requiredminingskill)
+        if(lockInfo->Skill[1] || lockInfo->Skill[0])
         {
             pUser->SendEquipError(EQUIP_ERR_ITEM_LOCKED, pItem, NULL );
             return;

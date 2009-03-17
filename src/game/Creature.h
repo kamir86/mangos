@@ -605,7 +605,10 @@ class MANGOS_DLL_SPEC Creature : public Unit
 
         uint32 GetGlobalCooldown() const { return m_GlobalCooldown; }
 
-        void SetDeadByDefault (bool death_state) {m_isDeadByDefault = death_state;}
+        void SetDeadByDefault (bool death_state) { m_isDeadByDefault = death_state; }
+
+        bool isActiveObject() const { return m_isActiveObject; }
+        void SetActiveObjectState(bool on);
 
     protected:
         bool CreateFromProto(uint32 guidlow,uint32 Entry,uint32 team, const CreatureData *data = NULL);
@@ -637,7 +640,6 @@ class MANGOS_DLL_SPEC Creature : public Unit
         bool m_isTotem;                                     // set only in Totem::Totem
         void RegenerateMana();
         void RegenerateHealth();
-        uint32 m_regenTimer;
         MovementGeneratorType m_defaultMovementType;
         Cell m_currentCell;                                 // store current cell where creature listed
         uint32 m_DBTableGuid;                               ///< For new or temporary creatures is 0 for saved it is lowguid
@@ -657,6 +659,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
     private:
         GridReference<Creature> m_gridRef;
         CreatureInfo const* m_creatureInfo;                 // in heroic mode can different from ObjMgr::GetCreatureTemplate(GetEntry())
+        bool m_isActiveObject;
 };
 
 class AssistDelayEvent : public BasicEvent

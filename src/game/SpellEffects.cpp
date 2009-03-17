@@ -17,10 +17,8 @@
  */
 
 #include "Common.h"
-#include "SharedDefines.h"
 #include "Database/DatabaseEnv.h"
 #include "WorldPacket.h"
-#include "WorldSession.h"
 #include "Opcodes.h"
 #include "Log.h"
 #include "UpdateMask.h"
@@ -30,7 +28,6 @@
 #include "Player.h"
 #include "SkillExtraItems.h"
 #include "Unit.h"
-#include "CreatureAI.h"
 #include "Spell.h"
 #include "DynamicObject.h"
 #include "SpellAuras.h"
@@ -783,7 +780,7 @@ void Spell::EffectDummy(uint32 i)
                     pGameObj->SetUInt32Value(GAMEOBJECT_LEVEL, m_caster->getLevel() );
                     pGameObj->SetSpellId(m_spellInfo->Id);
 
-                    DEBUG_LOG("AddObject at SpellEfects.cpp EffectDummy\n");
+                    DEBUG_LOG("AddObject at SpellEfects.cpp EffectDummy");
                     map->Add(pGameObj);
 
                     WorldPacket data(SMSG_GAMEOBJECT_SPAWN_ANIM_OBSOLETE, 8);
@@ -1604,7 +1601,7 @@ void Spell::EffectDummy(uint32 i)
 
                 if(!spellInfo)
                 {
-                    sLog.outError("WORLD: unknown spell id %i\n", spell_id);
+                    sLog.outError("WORLD: unknown spell id %i", spell_id);
                     return;
                 }
 
@@ -1664,7 +1661,7 @@ void Spell::EffectTriggerSpellWithValue(uint32 i)
 
     if(!spellInfo)
     {
-        sLog.outError("EffectTriggerSpellWithValue of spell %u: triggering unknown spell id %i\n", m_spellInfo->Id,triggered_spell_id);
+        sLog.outError("EffectTriggerSpellWithValue of spell %u: triggering unknown spell id %i", m_spellInfo->Id,triggered_spell_id);
         return;
     }
 
@@ -1932,7 +1929,7 @@ void Spell::EffectTeleportUnits(uint32 i)
             SpellTargetPosition const* st = spellmgr.GetSpellTargetPosition(m_spellInfo->Id);
             if(!st)
             {
-                sLog.outError( "Spell::EffectTeleportUnits - unknown Teleport coordinates for spell ID %u\n", m_spellInfo->Id );
+                sLog.outError( "Spell::EffectTeleportUnits - unknown Teleport coordinates for spell ID %u", m_spellInfo->Id );
                 return;
             }
             ((Player*)unitTarget)->TeleportTo(st->target_mapId,st->target_X,st->target_Y,st->target_Z,st->target_Orientation,unitTarget==m_caster ? TELE_TO_SPELL : 0);
@@ -1972,7 +1969,7 @@ void Spell::EffectTeleportUnits(uint32 i)
             // If not exist data for dest location - return
             if(!(m_targets.m_targetMask & TARGET_FLAG_DEST_LOCATION))
             {
-                sLog.outError( "Spell::EffectTeleportUnits - unknown EffectImplicitTargetB[%u] = %u for spell ID %u\n", i, m_spellInfo->EffectImplicitTargetB[i], m_spellInfo->Id );
+                sLog.outError( "Spell::EffectTeleportUnits - unknown EffectImplicitTargetB[%u] = %u for spell ID %u", i, m_spellInfo->EffectImplicitTargetB[i], m_spellInfo->Id );
                 return;
             }
             // Init dest coordinates
@@ -2825,7 +2822,7 @@ void Spell::SendLoot(uint64 guid, LootType loottype)
     player->SendLoot(guid, loottype);
 }
 
-void Spell::EffectOpenLock(uint32 /*i*/)
+void Spell::EffectOpenLock(uint32 effIndex)
 {
     if(!m_caster || m_caster->GetTypeId() != TYPEID_PLAYER)
     {
@@ -2835,7 +2832,6 @@ void Spell::EffectOpenLock(uint32 /*i*/)
 
     Player* player = (Player*)m_caster;
 
-    LootType loottype = LOOT_CORPSE;
     uint32 lockId = 0;
     uint64 guid = 0;
 
@@ -2847,7 +2843,7 @@ void Spell::EffectOpenLock(uint32 /*i*/)
         if( goInfo->type == GAMEOBJECT_TYPE_BUTTON && goInfo->button.noDamageImmune ||
             goInfo->type == GAMEOBJECT_TYPE_GOOBER && goInfo->goober.losOK )
         {
-            //isAllowUseBattleGroundObject() already called in CanCast()
+            //isAllowUseBattleGroundObject() already called in CheckCast()
             // in battleground check
             if(BattleGround *bg = player->GetBattleGround())
             {
@@ -2859,7 +2855,7 @@ void Spell::EffectOpenLock(uint32 /*i*/)
         }
         else if (goInfo->type == GAMEOBJECT_TYPE_FLAGSTAND)
         {
-            //isAllowUseBattleGroundObject() already called in CanCast()
+            //isAllowUseBattleGroundObject() already called in CheckCast()
             // in battleground check
             if(BattleGround *bg = player->GetBattleGround())
             {
@@ -2882,91 +2878,39 @@ void Spell::EffectOpenLock(uint32 /*i*/)
         return;
     }
 
-    if(!lockId)                                             // possible case for GO and maybe for items.
+    SkillType skillId = SKILL_NONE;
+    int32 reqSkillValue = 0;
+    int32 skillValue;
+
+    SpellCastResult res = CanOpenLock(effIndex,lockId,skillId,reqSkillValue,skillValue);
+    if(res != SPELL_CAST_OK)
     {
-        SendLoot(guid, loottype);
+        SendCastResult(res);
         return;
     }
 
-    // Get LockInfo
-    LockEntry const *lockInfo = sLockStore.LookupEntry(lockId);
+    SendLoot(guid, LOOT_SKINNING);
 
-    if (!lockInfo)
+    // not allow use skill grow at item base open
+    if(!m_CastItem && skillId != SKILL_NONE)
     {
-        sLog.outError( "Spell::EffectOpenLock: %s [guid = %u] has an unknown lockId: %u!",
-            (gameObjTarget ? "gameobject" : "item"), GUID_LOPART(guid), lockId);
-        SendCastResult(SPELL_FAILED_BAD_TARGETS);
-        return;
-    }
-
-    // check key
-    for(int i = 0; i < 5; ++i)
-    {
-        // type==1 This means lockInfo->key[i] is an item
-        if(lockInfo->keytype[i]==LOCK_KEY_ITEM && lockInfo->key[i] && m_CastItem && m_CastItem->GetEntry()==lockInfo->key[i])
-        {
-            SendLoot(guid, loottype);
-            return;
-        }
-    }
-
-    uint32 SkillId = 0;
-    // Check and skill-up skill
-    if( m_spellInfo->Effect[1] == SPELL_EFFECT_SKILL )
-        SkillId = m_spellInfo->EffectMiscValue[1];
-                                                            // pickpocketing spells
-    else if( m_spellInfo->EffectMiscValue[0] == LOCKTYPE_PICKLOCK )
-        SkillId = SKILL_LOCKPICKING;
-
-    // skill bonus provided by casting spell (mostly item spells)
-    uint32 spellSkillBonus = uint32(m_currentBasePoints[0]+1);
-
-    uint32 reqSkillValue = lockInfo->requiredminingskill;
-
-    if(lockInfo->requiredlockskill)                         // required pick lock skill applying
-    {
-        if(SkillId != SKILL_LOCKPICKING)                    // wrong skill (cheating?)
-        {
-            SendCastResult(SPELL_FAILED_FIZZLE);
-            return;
-        }
-
-        reqSkillValue = lockInfo->requiredlockskill;
-    }
-    else if(SkillId == SKILL_LOCKPICKING)                   // apply picklock skill to wrong target
-    {
-        SendCastResult(SPELL_FAILED_BAD_TARGETS);
-        return;
-    }
-
-    if ( SkillId )
-    {
-        loottype = LOOT_SKINNING;
-        if ( player->GetSkillValue(SkillId) + spellSkillBonus < reqSkillValue )
-        {
-            SendCastResult(SPELL_FAILED_LOW_CASTLEVEL);
-            return;
-        }
-
         // update skill if really known
-        if(uint32 SkillValue = player->GetPureSkillValue(SkillId))
+        if(uint32 pureSkillValue = player->GetPureSkillValue(skillId))
         {
             if(gameObjTarget)
             {
                 // Allow one skill-up until respawned
                 if ( !gameObjTarget->IsInSkillupList( player->GetGUIDLow() ) &&
-                    player->UpdateGatherSkill(SkillId, SkillValue, reqSkillValue) )
+                    player->UpdateGatherSkill(skillId, pureSkillValue, reqSkillValue) )
                     gameObjTarget->AddToSkillupList( player->GetGUIDLow() );
             }
             else if(itemTarget)
             {
                 // Do one skill-up
-                player->UpdateGatherSkill(SkillId, SkillValue, reqSkillValue);
+                player->UpdateGatherSkill(skillId, pureSkillValue, reqSkillValue);
             }
         }
     }
-
-    SendLoot(guid, loottype);
 }
 
 void Spell::EffectSummonChangeItem(uint32 i)
@@ -3354,7 +3298,7 @@ void Spell::EffectDispel(uint32 i)
 
             // On succes dispel
             // Devour Magic
-            if (m_spellInfo->SpellFamilyName == SPELLFAMILY_WARLOCK && m_spellInfo->Category == 12)
+            if (m_spellInfo->SpellFamilyName == SPELLFAMILY_WARLOCK && m_spellInfo->Category == SPELLCATEGORY_DEVOUR_MAGIC)
             {
                 uint32 heal_spell = 0;
                 switch (m_spellInfo->Id)
@@ -3425,7 +3369,7 @@ void Spell::EffectDistract(uint32 /*i*/)
         // Set creature Distracted, Stop it, And turn it
         unitTarget->SetOrientation(angle);
         unitTarget->StopMoving();
-        unitTarget->GetMotionMaster()->MoveDistract(damage*1000);
+        unitTarget->GetMotionMaster()->MoveDistract(damage*IN_MILISECONDS);
     }
 }
 
@@ -4446,7 +4390,7 @@ void Spell::EffectSummonObjectWild(uint32 i)
     }
 
     int32 duration = GetSpellDuration(m_spellInfo);
-    pGameObj->SetRespawnTime(duration > 0 ? duration/1000 : 0);
+    pGameObj->SetRespawnTime(duration > 0 ? duration/IN_MILISECONDS : 0);
     pGameObj->SetSpellId(m_spellInfo->Id);
 
     if(pGameObj->GetGoType() != GAMEOBJECT_TYPE_FLAGDROP)   // make dropped flag clickable for other players (not set owner guid (created by) for this)...
@@ -4489,7 +4433,7 @@ void Spell::EffectSummonObjectWild(uint32 i)
         if(linkedGO->Create(objmgr.GenerateLowGuid(HIGHGUID_GAMEOBJECT), linkedEntry, map,
             x, y, z, target->GetOrientation(), 0, 0, 0, 0, 100, 1))
         {
-            linkedGO->SetRespawnTime(duration > 0 ? duration/1000 : 0);
+            linkedGO->SetRespawnTime(duration > 0 ? duration/IN_MILISECONDS : 0);
             linkedGO->SetSpellId(m_spellInfo->Id);
 
             m_caster->AddGameObject(linkedGO);
@@ -4987,7 +4931,7 @@ void Spell::EffectDuel(uint32 i)
     pGameObj->SetUInt32Value(GAMEOBJECT_FACTION, m_caster->getFaction() );
     pGameObj->SetUInt32Value(GAMEOBJECT_LEVEL, m_caster->getLevel()+1 );
     int32 duration = GetSpellDuration(m_spellInfo);
-    pGameObj->SetRespawnTime(duration > 0 ? duration/1000 : 0);
+    pGameObj->SetRespawnTime(duration > 0 ? duration/IN_MILISECONDS : 0);
     pGameObj->SetSpellId(m_spellInfo->Id);
 
     m_caster->AddGameObject(pGameObj);
@@ -5111,7 +5055,7 @@ void Spell::EffectSummonPlayer(uint32 /*i*/)
     WorldPacket data(SMSG_SUMMON_REQUEST, 8+4+4);
     data << uint64(m_caster->GetGUID());                    // summoner guid
     data << uint32(m_caster->GetZoneId());                  // summoner zone
-    data << uint32(MAX_PLAYER_SUMMON_DELAY*1000);           // auto decline after msecs
+    data << uint32(MAX_PLAYER_SUMMON_DELAY*IN_MILISECONDS); // auto decline after msecs
     ((Player*)unitTarget)->GetSession()->SendPacket(&data);
 }
 
@@ -5259,7 +5203,7 @@ void Spell::EffectEnchantHeldItem(uint32 i)
             return;
 
         // Apply the temporary enchantment
-        item->SetEnchantment(slot, enchant_id, duration*1000, 0);
+        item->SetEnchantment(slot, enchant_id, duration*IN_MILISECONDS, 0);
         item_owner->ApplyEnchantment(item,slot,true);
     }
 }
@@ -5389,7 +5333,7 @@ void Spell::EffectSummonObject(uint32 i)
 
     pGameObj->SetUInt32Value(GAMEOBJECT_LEVEL,m_caster->getLevel());
     int32 duration = GetSpellDuration(m_spellInfo);
-    pGameObj->SetRespawnTime(duration > 0 ? duration/1000 : 0);
+    pGameObj->SetRespawnTime(duration > 0 ? duration/IN_MILISECONDS : 0);
     pGameObj->SetSpellId(m_spellInfo->Id);
     m_caster->AddGameObject(pGameObj);
 
@@ -6035,7 +5979,7 @@ void Spell::EffectTransmitted(uint32 effIndex)
                 case 3: lastSec = 17; break;
             }
 
-            duration = duration - lastSec*1000 + FISHING_BOBBER_READY_TIME*1000;
+            duration = duration - lastSec*IN_MILISECONDS + FISHING_BOBBER_READY_TIME*IN_MILISECONDS;
             break;
         }
         case GAMEOBJECT_TYPE_SUMMONING_RITUAL:
@@ -6055,14 +5999,14 @@ void Spell::EffectTransmitted(uint32 effIndex)
         }
     }
 
-    pGameObj->SetRespawnTime(duration > 0 ? duration/1000 : 0);
+    pGameObj->SetRespawnTime(duration > 0 ? duration/IN_MILISECONDS : 0);
 
     pGameObj->SetOwnerGUID(m_caster->GetGUID() );
 
     pGameObj->SetUInt32Value(GAMEOBJECT_LEVEL, m_caster->getLevel() );
     pGameObj->SetSpellId(m_spellInfo->Id);
 
-    DEBUG_LOG("AddObject at SpellEfects.cpp EffectTransmitted\n");
+    DEBUG_LOG("AddObject at SpellEfects.cpp EffectTransmitted");
     //m_caster->AddGameObject(pGameObj);
     //m_ObjToDel.push_back(pGameObj);
 
@@ -6078,7 +6022,7 @@ void Spell::EffectTransmitted(uint32 effIndex)
         if(linkedGO->Create(objmgr.GenerateLowGuid(HIGHGUID_GAMEOBJECT), linkedEntry, cMap,
             fx, fy, fz, m_caster->GetOrientation(), 0, 0, 0, 0, 100, 1))
         {
-            linkedGO->SetRespawnTime(duration > 0 ? duration/1000 : 0);
+            linkedGO->SetRespawnTime(duration > 0 ? duration/IN_MILISECONDS : 0);
             linkedGO->SetUInt32Value(GAMEOBJECT_LEVEL, m_caster->getLevel() );
             linkedGO->SetSpellId(m_spellInfo->Id);
             linkedGO->SetOwnerGUID(m_caster->GetGUID() );

@@ -19,12 +19,10 @@
 #include "Common.h"
 #include "Database/DatabaseEnv.h"
 #include "Log.h"
-#include "WorldSession.h"
 #include "WorldPacket.h"
 #include "ObjectMgr.h"
 #include "SpellMgr.h"
 #include "Pet.h"
-#include "MapManager.h"
 #include "Formulas.h"
 #include "SpellAuras.h"
 #include "CreatureAI.h"
@@ -333,7 +331,7 @@ bool Pet::LoadPetFromDB( Player* owner, uint32 petentry, uint32 petnumber, bool 
     AIM_Initialize();
     map->Add((Creature*)this);
 
-    // Spells should be loaded after pet is added to map, because in CanCast is check on it
+    // Spells should be loaded after pet is added to map, because in CheckCast is check on it
     _LoadSpells();
     _LoadSpellCooldowns();
 
@@ -1236,7 +1234,7 @@ void Pet::_LoadSpellCooldowns()
                 continue;
 
             data << uint32(spell_id);
-            data << uint32(uint32(db_time-curTime)*1000);   // in m.secs
+            data << uint32(uint32(db_time-curTime)*IN_MILISECONDS);
 
             _AddCreatureSpellCooldown(spell_id,db_time);
 

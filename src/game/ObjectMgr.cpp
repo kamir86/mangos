@@ -28,7 +28,6 @@
 #include "SpellMgr.h"
 #include "UpdateMask.h"
 #include "World.h"
-#include "WorldSession.h"
 #include "Group.h"
 #include "Guild.h"
 #include "ArenaTeam.h"
@@ -43,7 +42,6 @@
 #include "SpellAuras.h"
 #include "Util.h"
 #include "WaypointManager.h"
-#include "BattleGround.h"
 
 INSTANTIATE_SINGLETON_1(ObjectMgr);
 
@@ -275,7 +273,7 @@ void ObjectMgr::LoadCreatureLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 creature locale strings. DB table `locales_creature` is empty.");
         return;
     }
@@ -343,7 +341,7 @@ void ObjectMgr::LoadNpcOptionLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 npc_option locale strings. DB table `locales_npc_option` is empty.");
         return;
     }
@@ -746,7 +744,7 @@ void ObjectMgr::LoadCreatures()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outErrorDb(">> Loaded 0 creature. DB table `creature` is empty.");
         return;
     }
@@ -813,6 +811,13 @@ void ObjectMgr::LoadCreatures()
         {
             sLog.outErrorDb("Table `creature` have creature (GUID: %u Entry: %u) with `creature_template`.`RegenHealth`=1 and low current health (%u), `creature_template`.`minhealth`=%u.",guid,data.id,data.curhealth, cInfo->minhealth );
             data.curhealth = cInfo->minhealth;
+        }
+
+        if(cInfo->flags_extra & CREATURE_FLAG_EXTRA_INSTANCE_BIND)
+        {
+            MapEntry const* map = sMapStore.LookupEntry(data.mapid);
+            if(!map || !map->IsDungeon())
+                sLog.outErrorDb("Table `creature` have creature (GUID: %u Entry: %u) with `creature_template`.`flags_extra` including CREATURE_FLAG_EXTRA_INSTANCE_BIND but creature are not in instance.",guid,data.id);
         }
 
         if(data.curmana < cInfo->minmana)
@@ -1162,7 +1167,7 @@ void ObjectMgr::LoadItemLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 Item locale strings. DB table `locales_item` is empty.");
         return;
     }
@@ -1310,7 +1315,7 @@ void ObjectMgr::LoadItemPrototypes()
             bool req = proto->InventoryType!=INVTYPE_NON_EQUIP || proto->PageText;
             if(!req)
             {
-                for (int j = 0; j < 5; ++j)
+                for (int j = 0; j < MAX_ITEM_PROTO_SPELLS; ++j)
                 {
                     if(proto->Spells[j].SpellId)
                     {
@@ -1364,7 +1369,7 @@ void ObjectMgr::LoadItemPrototypes()
             const_cast<ItemPrototype*>(proto)->Stackable = 255;
         }
 
-        for (int j = 0; j < 10; j++)
+        for (int j = 0; j < MAX_ITEM_PROTO_STATS; ++j)
         {
             // for ItemStatValue != 0
             if(proto->ItemStat[j].ItemStatValue && proto->ItemStat[j].ItemStatType >= MAX_ITEM_MOD)
@@ -1374,7 +1379,7 @@ void ObjectMgr::LoadItemPrototypes()
             }
         }
 
-        for (int j = 0; j < 5; j++)
+        for (int j = 0; j < MAX_ITEM_PROTO_DAMAGES; ++j)
         {
             if(proto->Damage[j].DamageType >= MAX_SPELL_SCHOOL)
             {
@@ -1431,7 +1436,7 @@ void ObjectMgr::LoadItemPrototypes()
             }
 
             // spell_3*,spell_4*,spell_5* is empty
-            for (int j = 2; j < 5; j++)
+            for (int j = 2; j < MAX_ITEM_PROTO_SPELLS; ++j)
             {
                 if(proto->Spells[j].SpellTrigger != ITEM_SPELLTRIGGER_ON_USE)
                 {
@@ -1449,7 +1454,7 @@ void ObjectMgr::LoadItemPrototypes()
         // normal spell list
         else
         {
-            for (int j = 0; j < 5; j++)
+            for (int j = 0; j < MAX_ITEM_PROTO_SPELLS; ++j)
             {
                 if(proto->Spells[j].SpellTrigger >= MAX_ITEM_SPELLTRIGGER || proto->Spells[j].SpellTrigger == ITEM_SPELLTRIGGER_LEARN_SPELL_ID)
                 {
@@ -1518,7 +1523,7 @@ void ObjectMgr::LoadItemPrototypes()
         if(proto->TotemCategory && !sTotemCategoryStore.LookupEntry(proto->TotemCategory))
             sLog.outErrorDb("Item (Entry: %u) has wrong TotemCategory (%u)",i,proto->TotemCategory);
 
-        for (int j = 0; j < 3; j++)
+        for (int j = 0; j < MAX_ITEM_PROTO_SOCKETS; j++)
         {
             if(proto->Socket[j].Color && (proto->Socket[j].Color & SOCKET_COLOR_ALL) != proto->Socket[j].Color)
             {
@@ -1579,7 +1584,10 @@ void ObjectMgr::LoadPetLevelInfo()
                 if(current_level > STRONG_MAX_LEVEL)        // hardcoded level maximum
                     sLog.outErrorDb("Wrong (> %u) level %u in `pet_levelstats` table, ignoring.",STRONG_MAX_LEVEL,current_level);
                 else
+                {
                     sLog.outDetail("Unused (> MaxPlayerLevel in mangosd.conf) level %u in `pet_levelstats` table, ignoring.",current_level);
+                    ++count;                                // make result loading percent "expected" correct in case disabled detail mode for example.
+                }
                 continue;
             }
             else if(current_level < 1)
@@ -1958,7 +1966,10 @@ void ObjectMgr::LoadPlayerInfo()
                 if(current_level > STRONG_MAX_LEVEL)        // hardcoded level maximum
                     sLog.outErrorDb("Wrong (> %u) level %u in `player_classlevelstats` table, ignoring.",STRONG_MAX_LEVEL,current_level);
                 else
+                {
                     sLog.outDetail("Unused (> MaxPlayerLevel in mangosd.conf) level %u in `player_classlevelstats` table, ignoring.",current_level);
+                    ++count;                                // make result loading percent "expected" correct in case disabled detail mode for example.
+                }
                 continue;
             }
 
@@ -2053,7 +2064,10 @@ void ObjectMgr::LoadPlayerInfo()
                 if(current_level > STRONG_MAX_LEVEL)        // hardcoded level maximum
                     sLog.outErrorDb("Wrong (> %u) level %u in `player_levelstats` table, ignoring.",STRONG_MAX_LEVEL,current_level);
                 else
+                {
                     sLog.outDetail("Unused (> MaxPlayerLevel in mangosd.conf) level %u in `player_levelstats` table, ignoring.",current_level);
+                    ++count;                                // make result loading percent "expected" correct in case disabled detail mode for example.
+                }
                 continue;
             }
 
@@ -3073,14 +3087,15 @@ void ObjectMgr::LoadQuests()
 
         if(qinfo->NextQuestInChain)
         {
-            if(mQuestTemplates.find(qinfo->NextQuestInChain) == mQuestTemplates.end())
+            QuestMap::iterator qNextItr = mQuestTemplates.find(qinfo->NextQuestInChain);
+            if(qNextItr == mQuestTemplates.end())
             {
                 sLog.outErrorDb("Quest %u has `NextQuestInChain` = %u but quest %u does not exist, quest chain will not work.",
                     qinfo->GetQuestId(),qinfo->NextQuestInChain ,qinfo->NextQuestInChain );
                 qinfo->NextQuestInChain = 0;
             }
             else
-                mQuestTemplates[qinfo->NextQuestInChain]->prevChainQuests.push_back(qinfo->GetQuestId());
+                qNextItr->second->prevChainQuests.push_back(qinfo->GetQuestId());
         }
 
         // fill additional data stores
@@ -3098,14 +3113,15 @@ void ObjectMgr::LoadQuests()
 
         if(qinfo->NextQuestId)
         {
-            if (mQuestTemplates.find(abs(qinfo->GetNextQuestId())) == mQuestTemplates.end())
+            QuestMap::iterator qNextItr = mQuestTemplates.find(abs(qinfo->GetNextQuestId()));
+            if (qNextItr == mQuestTemplates.end())
             {
                 sLog.outErrorDb("Quest %d has NextQuestId %i, but no such quest", qinfo->GetQuestId(), qinfo->GetNextQuestId());
             }
             else
             {
                 int32 signedQuestId = qinfo->NextQuestId < 0 ? -int32(qinfo->GetQuestId()) : int32(qinfo->GetQuestId());
-                mQuestTemplates[abs(qinfo->GetNextQuestId())]->prevQuests.push_back(signedQuestId);
+                qNextItr->second->prevQuests.push_back(signedQuestId);
             }
         }
 
@@ -3171,7 +3187,7 @@ void ObjectMgr::LoadQuestLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 Quest locale strings. DB table `locales_quest` is empty.");
         return;
     }
@@ -3795,7 +3811,7 @@ void ObjectMgr::LoadPageTextLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 PageText locale strings. DB table `locales_page_text` is empty.");
         return;
     }
@@ -3970,7 +3986,7 @@ void ObjectMgr::LoadNpcTextLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 Quest locale strings. DB table `locales_npc_text` is empty.");
         return;
     }
@@ -4038,7 +4054,7 @@ void ObjectMgr::ReturnOrDeleteOldMails(bool serverUp)
     {
         barGoLink bar(1);
         bar.step();
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Only expired mails (need to be return or delete) or DB table `mail` is empty.");
         return;                                             // any mails need to be returned or deleted
     }
@@ -4726,7 +4742,8 @@ void ObjectMgr::LoadAreaTriggerTeleports()
 
         if(at.requiredQuest)
         {
-            if(!mQuestTemplates[at.requiredQuest])
+            QuestMap::iterator qReqItr = mQuestTemplates.find(at.requiredQuest);
+            if(qReqItr == mQuestTemplates.end())
             {
                 sLog.outErrorDb("Required Quest %u not exist for trigger %u, remove quest done requirement.",at.requiredQuest,Trigger_ID);
                 at.requiredQuest = 0;
@@ -5011,7 +5028,7 @@ void ObjectMgr::LoadGameObjectLocales()
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         sLog.outString(">> Loaded 0 gameobject locale strings. DB table `locales_gameobject` is empty.");
         return;
     }
@@ -5043,9 +5060,9 @@ void ObjectMgr::LoadGameObjectLocales()
             }
         }
 
-        for(int i = MAX_LOCALE; i < MAX_LOCALE*2-1; ++i)
+        for(int i = 1; i < MAX_LOCALE; ++i)
         {
-            std::string str = fields[i].GetCppString();
+            std::string str = fields[i+(MAX_LOCALE-1)].GetCppString();
             if(!str.empty())
             {
                 int idx = GetOrNewIndexForLocale(LocaleConstant(i));
@@ -5532,19 +5549,19 @@ void ObjectMgr::LoadWeatherZoneChances()
             if(wzc.data[season].rainChance > 100)
             {
                 wzc.data[season].rainChance = 25;
-                sLog.outErrorDb("Weather for zone %u season %u has wrong rain chance > 100%",zone_id,season);
+                sLog.outErrorDb("Weather for zone %u season %u has wrong rain chance > 100%%",zone_id,season);
             }
 
             if(wzc.data[season].snowChance > 100)
             {
                 wzc.data[season].snowChance = 25;
-                sLog.outErrorDb("Weather for zone %u season %u has wrong snow chance > 100%",zone_id,season);
+                sLog.outErrorDb("Weather for zone %u season %u has wrong snow chance > 100%%",zone_id,season);
             }
 
             if(wzc.data[season].stormChance > 100)
             {
                 wzc.data[season].stormChance = 25;
-                sLog.outErrorDb("Weather for zone %u season %u has wrong storm chance > 100%",zone_id,season);
+                sLog.outErrorDb("Weather for zone %u season %u has wrong storm chance > 100%%",zone_id,season);
             }
         }
 
@@ -6020,7 +6037,7 @@ bool ObjectMgr::LoadMangosStrings(DatabaseType& db, char const* table, int32 min
 
         bar.step();
 
-        sLog.outString("");
+        sLog.outString();
         if(min_value == MIN_MANGOS_STRING_ID)               // error only in case internal strings
             sLog.outErrorDb(">> Loaded 0 mangos strings. DB table `%s` is empty. Cannot continue.",table);
         else
@@ -7026,4 +7043,14 @@ uint32 MANGOS_DLL_SPEC GetScriptId(const char *name)
 ObjectMgr::ScriptNameMap & GetScriptNames()
 {
     return objmgr.GetScriptNames();
+}
+
+CreatureInfo const* GetCreatureTemplateStore(uint32 entry)
+{
+    return sCreatureStorage.LookupEntry<CreatureInfo>(entry);
+}
+
+Quest const* GetQuestTemplateStore(uint32 entry)
+{
+    return objmgr.GetQuestTemplate(entry);
 }

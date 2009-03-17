@@ -34,11 +34,9 @@
 #include "Chat.h"
 #include "ScriptCalls.h"
 #include <zlib/zlib.h>
-#include "MapManager.h"
 #include "ObjectAccessor.h"
 #include "Object.h"
 #include "BattleGround.h"
-#include "SpellAuras.h"
 #include "Pet.h"
 #include "SocialMgr.h"
 
@@ -1043,7 +1041,7 @@ void WorldSession::HandleMoveTeleportAck(WorldPacket&/* recv_data*/)
         recv_data >> guid;
         recv_data >> flags >> time;
         DEBUG_LOG("Guid " I64FMTD,guid);
-        DEBUG_LOG("Flags %u, time %u",flags, time/1000);
+        DEBUG_LOG("Flags %u, time %u",flags, time/IN_MILISECONDS);
     */
 }
 

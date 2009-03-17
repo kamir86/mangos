@@ -29,11 +29,9 @@
 #include "Player.h"
 #include "Unit.h"
 #include "Spell.h"
-#include "SpellAuras.h"
 #include "DynamicObject.h"
 #include "Group.h"
 #include "UpdateData.h"
-#include "MapManager.h"
 #include "ObjectAccessor.h"
 #include "Policies/SingletonImp.h"
 #include "Totem.h"
@@ -540,7 +538,7 @@ void Aura::Update(uint32 diff)
             {
                 Powers powertype = Powers(m_spellProto->powerType);
                 int32 manaPerSecond = m_spellProto->manaPerSecond + m_spellProto->manaPerSecondPerLevel * caster->getLevel();
-                m_timeCla = 1000;
+                m_timeCla = 1*IN_MILISECONDS;
                 if (manaPerSecond)
                 {
                     if(powertype==POWER_HEALTH)
@@ -926,6 +924,15 @@ void Aura::_AddAura()
             if(caster->HasAura(12292, 0))
                 return;
         }    
+	}
+    // set infinity cooldown state for spells
+    if(caster && caster->GetTypeId() == TYPEID_PLAYER)
+    {
+        if (m_spellProto->Attributes & SPELL_ATTR_DISABLED_WHILE_ACTIVE)
+        {
+            Item* castItem = m_castItemGuid ? ((Player*)caster)->GetItemByGuid(m_castItemGuid) : NULL;
+            ((Player*)caster)->AddSpellAndCategoryCooldowns(m_spellProto,castItem ? castItem->GetEntry() : 0, NULL,true);
+        }
     }
 
     // passive auras (except totem auras) do not get placed in the slots
@@ -1098,6 +1105,7 @@ void Aura::_RemoveAura()
         if(caster && caster->GetTypeId() == TYPEID_PLAYER)
         {
             if ( GetSpellProto()->Attributes & SPELL_ATTR_DISABLED_WHILE_ACTIVE )
+                // note: item based cooldowns and cooldown spell mods with charges ignored (unknown existed cases)
                 ((Player*)caster)->SendCooldownEvent(GetSpellProto());
         }
     }
@@ -1413,8 +1421,11 @@ void Aura::TriggerSpell()
 //                    case 28522: break;
 //                    // Silithyst
 //                    case 29519: break;
-//                    // Inoculate Nestlewood Owlkin
-                    case 29528: trigger_spell_id = 28713; break;
+                    // Inoculate Nestlewood Owlkin
+                    case 29528:
+                        if(target->GetTypeId()!=TYPEID_UNIT)// prevent error reports in case ignored player target
+                            return;
+                        break;
 //                    // Overload
 					case 29768:
 					{
@@ -2038,30 +2049,29 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
             return;
         }
 
-        // Waiting to Resurrect
-        if(GetId()==2584)
+        switch(GetId())
         {
-            // Waiting to resurrect spell cancel, we must remove player from resurrect queue
-            if(m_target->GetTypeId() == TYPEID_PLAYER)
-                if(BattleGround *bg = ((Player*)m_target)->GetBattleGround())
-                    bg->RemovePlayerFromResurrectQueue(m_target->GetGUID());
-            return;
-        }
-
-        // Dark Fiend
-        if(GetId()==45934)
-        {
-            // Kill target if dispelled
-            if (m_removeMode==AURA_REMOVE_BY_DISPEL)
-                m_target->DealDamage(m_target, m_target->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
-            return;
-        }
-
-        // Burning Winds
-        if(GetId()==46308)                                  // casted only at creatures at spawn
-        {
-            m_target->CastSpell(m_target,47287,true,NULL,this);
-            return;
+            case 2584:                                      // Waiting to Resurrect
+            {
+                // Waiting to resurrect spell cancel, we must remove player from resurrect queue
+                if(m_target->GetTypeId() == TYPEID_PLAYER)
+                    if(BattleGround *bg = ((Player*)m_target)->GetBattleGround())
+                        bg->RemovePlayerFromResurrectQueue(m_target->GetGUID());
+                return;
+            }
+            case 45934:                                     // Dark Fiend
+            {
+                // Kill target if dispelled
+                if (m_removeMode==AURA_REMOVE_BY_DISPEL)
+                    m_target->DealDamage(m_target, m_target->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
+                return;
+            }
+            case 46308:                                     // Burning Winds
+            {
+                // casted only at creatures at spawn
+                m_target->CastSpell(m_target,47287,true,NULL,this);
+                return;
+            }
         }
     }
 
@@ -2745,7 +2755,7 @@ void Aura::HandleAuraTransform(bool apply, bool Real)
             // for players, start regeneration after 1s (in polymorph fast regeneration case)
             // only if caster is Player (after patch 2.4.2)
             if(IS_PLAYER_GUID(GetCasterGUID()) )
-                ((Player*)m_target)->setRegenTimer(1000);
+                ((Player*)m_target)->setRegenTimer(1*IN_MILISECONDS);
 
             //dismount polymorphed target (after patch 2.4.2)
             if (m_target->IsMounted())
