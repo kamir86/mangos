@@ -4993,6 +4993,10 @@ Unit* Spell::SelectMagnetTarget()
                 {
                     target = magnet;
                     m_targets.setUnitTarget(target);
+
+					if( ((Creature*)magnet)->isTotem() && magnet->isAlive() )
+                        magnet->DealDamage(magnet, magnet->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
+
                     break;
                 }
             }
