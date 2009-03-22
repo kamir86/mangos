@@ -833,7 +833,7 @@ void Player::HandleDrowning()
 
     AuraList const& mModWaterBreathing = GetAurasByType(SPELL_AURA_MOD_WATER_BREATHING);
     for(AuraList::const_iterator i = mModWaterBreathing.begin(); i != mModWaterBreathing.end(); ++i)
-        UnderWaterTime = uint32(UnderWaterTime * (100.0f + (*i)->GetModifier()->m_amount) / 100.0f);
+        UnderWaterTime = uint32(UnderWaterTime * (100.0f + (*i)->GetModifier()->m_amount * (*i)->m_stackAmount) / 100.0f);
 
     if ((m_isunderwater & 0x01) && !(m_isunderwater & 0x80) && isAlive())
     {
@@ -1867,7 +1867,7 @@ void Player::Regenerate(Powers power)
         AuraList const& ModPowerRegenPCTAuras = GetAurasByType(SPELL_AURA_MOD_POWER_REGEN_PERCENT);
         for(AuraList::const_iterator i = ModPowerRegenPCTAuras.begin(); i != ModPowerRegenPCTAuras.end(); ++i)
             if ((*i)->GetModifier()->m_miscvalue == power)
-                addvalue *= ((*i)->GetModifier()->m_amount + 100) / 100.0f;
+                addvalue *= ((*i)->GetModifier()->m_amount * (*i)->m_stackAmount + 100) / 100.0f;
     }
 
     if (power != POWER_RAGE)
@@ -1908,7 +1908,7 @@ void Player::RegenerateHealth()
         {
             AuraList const& mModHealthRegenPct = GetAurasByType(SPELL_AURA_MOD_HEALTH_REGEN_PERCENT);
             for(AuraList::const_iterator i = mModHealthRegenPct.begin(); i != mModHealthRegenPct.end(); ++i)
-                addvalue *= (100.0f + (*i)->GetModifier()->m_amount) / 100.0f;
+                addvalue *= (100.0f + (*i)->GetModifier()->m_amount * (*i)->m_stackAmount) / 100.0f;
         }
         else if(HasAuraType(SPELL_AURA_MOD_REGEN_DURING_COMBAT))
             addvalue *= GetTotalAuraModifier(SPELL_AURA_MOD_REGEN_DURING_COMBAT) / 100.0f;
@@ -2105,7 +2105,7 @@ void Player::GiveXP(uint32 xp, Unit* victim)
     // handle SPELL_AURA_MOD_XP_PCT auras
     Unit::AuraList const& ModXPPctAuras = GetAurasByType(SPELL_AURA_MOD_XP_PCT);
     for(Unit::AuraList::const_iterator i = ModXPPctAuras.begin();i != ModXPPctAuras.end(); ++i)
-        xp = uint32(xp*(1.0f + (*i)->GetModifier()->m_amount / 100.0f));
+        xp = uint32(xp*(1.0f + (*i)->GetModifier()->m_amount * (*i)->m_stackAmount / 100.0f));
 
     // XP resting bonus for kill
     uint32 rested_bonus_xp = victim ? GetXPRestBonus(xp) : 0;
@@ -4808,6 +4808,7 @@ void Player::UpdateWeaponSkill (WeaponAttackType attType)
 
 void Player::UpdateCombatSkills(Unit *pVictim, WeaponAttackType attType, MeleeHitOutcome outcome, bool defence)
 {
+/* Not need, this checked on call this func from trigger system
     switch(outcome)
     {
         case MELEE_HIT_CRIT:
@@ -4820,7 +4821,7 @@ void Player::UpdateCombatSkills(Unit *pVictim, WeaponAttackType attType, MeleeHi
         default:
             break;
     }
-
+*/
     uint32 plevel = getLevel();                             // if defense than pVictim == attacker
     uint32 greylevel = MaNGOS::XP::GetGrayLevel(plevel);
     uint32 moblevel = pVictim->getLevelForTarget(this);
@@ -6689,7 +6690,7 @@ void Player::_ApplyWeaponDependentAuraCritMod(Item *item, WeaponAttackType attac
 
     if (item->IsFitToSpellRequirements(aura->GetSpellProto()))
     {
-        HandleBaseModValue(mod, FLAT_MOD, float (aura->GetModifier()->m_amount), apply);
+        HandleBaseModValue(mod, FLAT_MOD, float (aura->GetModifier()->m_amount * aura->m_stackAmount), apply);
     }
 }
 
@@ -6723,7 +6724,7 @@ void Player::_ApplyWeaponDependentAuraDamageMod(Item *item, WeaponAttackType att
 
     if (item->IsFitToSpellRequirements(aura->GetSpellProto()))
     {
-        HandleStatModifier(unitMod, unitModType, float(modifier->m_amount),apply);
+        HandleStatModifier(unitMod, unitModType, float(modifier->m_amount * aura->m_stackAmount),apply);
     }
 }
 
@@ -17414,7 +17415,7 @@ inline void UpdateVisibilityOf_helper(std::set<uint64>& s64, GameObject* target)
 }
 
 template<class T>
-void Player::UpdateVisibilityOf(T* target, UpdateData& data, UpdateDataMapType& data_updates, std::set<WorldObject*>& visibleNow)
+void Player::UpdateVisibilityOf(T* target, UpdateData& data, std::set<WorldObject*>& visibleNow)
 {
     if(HaveAtClient(target))
     {
@@ -17434,7 +17435,6 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, UpdateDataMapType& 
         if(target->isVisibleForInState(this,false))
         {
             visibleNow.insert(target);
-            target->BuildUpdate(data_updates);
             target->BuildCreateUpdateBlockForPlayer(&data, this);
             UpdateVisibilityOf_helper(m_clientGUIDs,target);
 
@@ -17446,11 +17446,11 @@ void Player::UpdateVisibilityOf(T* target, UpdateData& data, UpdateDataMapType& 
     }
 }
 
-template void Player::UpdateVisibilityOf(Player*        target, UpdateData& data, UpdateDataMapType& data_updates, std::set<WorldObject*>& visibleNow);
-template void Player::UpdateVisibilityOf(Creature*      target, UpdateData& data, UpdateDataMapType& data_updates, std::set<WorldObject*>& visibleNow);
-template void Player::UpdateVisibilityOf(Corpse*        target, UpdateData& data, UpdateDataMapType& data_updates, std::set<WorldObject*>& visibleNow);
-template void Player::UpdateVisibilityOf(GameObject*    target, UpdateData& data, UpdateDataMapType& data_updates, std::set<WorldObject*>& visibleNow);
-template void Player::UpdateVisibilityOf(DynamicObject* target, UpdateData& data, UpdateDataMapType& data_updates, std::set<WorldObject*>& visibleNow);
+template void Player::UpdateVisibilityOf(Player*        target, UpdateData& data, std::set<WorldObject*>& visibleNow);
+template void Player::UpdateVisibilityOf(Creature*      target, UpdateData& data, std::set<WorldObject*>& visibleNow);
+template void Player::UpdateVisibilityOf(Corpse*        target, UpdateData& data, std::set<WorldObject*>& visibleNow);
+template void Player::UpdateVisibilityOf(GameObject*    target, UpdateData& data, std::set<WorldObject*>& visibleNow);
+template void Player::UpdateVisibilityOf(DynamicObject* target, UpdateData& data, std::set<WorldObject*>& visibleNow);
 
 void Player::InitPrimaryProffesions()
 {
