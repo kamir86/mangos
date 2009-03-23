@@ -794,14 +794,14 @@ void Player::StopMirrorTimer(MirrorTimerType Type)
     GetSession()->SendPacket( &data );
 }
 
-void Player::EnvironmentalDamage(uint64 guid, EnviromentalDamage type, uint32 damage)
+void Player::EnvironmentalDamage(EnviromentalDamage type, uint32 damage)
 {
     WorldPacket data(SMSG_ENVIRONMENTALDAMAGELOG, (21));
-    data << (uint64)guid;
-    data << (uint8)(type!=DAMAGE_FALL_TO_VOID ? type : DAMAGE_FALL);
-    data << (uint32)damage;
-    data << (uint32)0;
-    data << (uint32)0;
+    data << uint64(GetGUID());
+    data << uint8(type!=DAMAGE_FALL_TO_VOID ? type : DAMAGE_FALL);
+    data << uint32(damage);
+    data << uint32(0);
+    data << uint32(0);
     SendMessageToSet(&data, true);
 
     DealDamage(this, damage, NULL, SELF_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
@@ -5827,14 +5827,18 @@ bool Player::SetOneFactionReputation(FactionEntry const* factionEntry, int32 sta
 //Calculate total reputation percent player gain with quest/creature level
 int32 Player::CalculateReputationGain(uint32 creatureOrQuestLevel, int32 rep, bool for_quest)
 {
-    // for grey creature kill received 20%, in other case 100.
-    int32 percent = (!for_quest && (creatureOrQuestLevel <= MaNGOS::XP::GetGrayLevel(getLevel()))) ? 20 : 100;
+    float percent = 100.0f;
+
+    float rate = for_quest ? sWorld.getRate(RATE_REPUTATION_LOWLEVEL_QUEST) : sWorld.getRate(RATE_REPUTATION_LOWLEVEL_KILL);
+
+    if(rate != 1.0f && creatureOrQuestLevel <= MaNGOS::XP::GetGrayLevel(getLevel()))
+        percent *= rate;
 
     int32 repMod = GetTotalAuraModifier(SPELL_AURA_MOD_REPUTATION_GAIN);
 
     percent += rep > 0 ? repMod : -repMod;
 
-    if(percent <=0)
+    if(percent <= 0.0f)
         return 0;
 
     return int32(sWorld.getRate(RATE_REPUTATION_GAIN)*rep*percent/100);
@@ -10209,21 +10213,27 @@ void Player::RemoveItem( uint8 bag, uint8 slot, bool update )
 
                 // remove item dependent auras and casts (only weapon and armor slots)
                 if(slot < EQUIPMENT_SLOT_END)
+                {
                     RemoveItemDependentAurasAndCasts(pItem);
 
-                // remove held enchantments
-                if ( slot == EQUIPMENT_SLOT_MAINHAND )
-                {
-                    if (pItem->GetItemSuffixFactor())
+                    // remove held enchantments, update expertise
+                    if ( slot == EQUIPMENT_SLOT_MAINHAND )
                     {
-                        pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_3);
-                        pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_4);
+                        if (pItem->GetItemSuffixFactor())
+                        {
+                            pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_3);
+                            pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_4);
+                        }
+                        else
+                        {
+                            pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_0);
+                            pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_1);
+                        }
+
+                        UpdateExpertise(BASE_ATTACK);
                     }
-                    else
-                    {
-                        pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_0);
-                        pItem->ClearEnchantment(PROP_ENCHANTMENT_SLOT_1);
-                    }
+                    else if( slot == EQUIPMENT_SLOT_OFFHAND )
+                        UpdateExpertise(OFF_ATTACK);
                 }
             }
 
@@ -10244,11 +10254,6 @@ void Player::RemoveItem( uint8 bag, uint8 slot, bool update )
         pItem->SetSlot( NULL_SLOT );
         if( IsInWorld() && update )
             pItem->SendUpdateToPlayer( this );
-
-        if( slot == EQUIPMENT_SLOT_MAINHAND )
-            UpdateExpertise(BASE_ATTACK);
-        else if( slot == EQUIPMENT_SLOT_OFFHAND )
-            UpdateExpertise(OFF_ATTACK);
     }
 }
 
@@ -10332,6 +10337,12 @@ void Player::DestroyItem( uint8 bag, uint8 slot, bool update )
             {
                 // remove item dependent auras and casts (only weapon and armor slots)
                 RemoveItemDependentAurasAndCasts(pItem);
+
+                // update expertise
+                if ( slot == EQUIPMENT_SLOT_MAINHAND )
+                    UpdateExpertise(BASE_ATTACK);
+                else if( slot == EQUIPMENT_SLOT_OFFHAND )
+                    UpdateExpertise(OFF_ATTACK);
 
                 // equipment visual show
                 SetVisibleItemSlot(slot,NULL);
@@ -15639,16 +15650,6 @@ void Player::SendAutoRepeatCancel()
     GetSession()->SendPacket( &data );
 }
 
-void Player::PlaySound(uint32 Sound, bool OnlySelf)
-{
-    WorldPacket data(SMSG_PLAY_SOUND, 4);
-    data << Sound;
-    if (OnlySelf)
-        GetSession()->SendPacket( &data );
-    else
-        SendMessageToSet( &data, true );
-}
-
 void Player::SendExplorationExperience(uint32 Area, uint32 Experience)
 {
     WorldPacket data( SMSG_EXPLORATION_EXPERIENCE, 8 );
@@ -18695,7 +18696,7 @@ void Player::HandleFall(MovementInfo const& movementInfo)
                 if (GetDummyAura(43621))
                     damage = GetMaxHealth()/2;
 
-                EnvironmentalDamage(GetGUID(), DAMAGE_FALL, damage);
+                EnvironmentalDamage(DAMAGE_FALL, damage);
             }
 
             //Z given by moveinfo, LastZ, FallTime, WaterZ, MapZ, Damage, Safefall reduction

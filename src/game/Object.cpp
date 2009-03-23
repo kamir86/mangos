@@ -1687,3 +1687,24 @@ void WorldObject::GetNearPoint(WorldObject const* searcher, float &x, float &y, 
     UpdateGroundPositionZ(x,y,z);                           // update to LOS height if available
     if(localDebug) sLog.outError("WorldObject::GetNearPoint: RETURN POINT 4 (angle = %f, map_id = %u, x = %f, y = %f, z = %f)", angle, GetMapId(), x, y, z);
 }
+
+void WorldObject::PlayDistanceSound( uint32 sound_id, Player* target /*= NULL*/ )
+{
+    WorldPacket data(SMSG_PLAY_OBJECT_SOUND,4+8);
+    data << uint32(sound_id);
+    data << GetGUID();
+    if (target)
+        target->SendDirectMessage( &data );
+    else
+        SendMessageToSet( &data, true );
+}
+
+void WorldObject::PlayDirectSound( uint32 sound_id, Player* target /*= NULL*/ )
+{
+    WorldPacket data(SMSG_PLAY_SOUND, 4);
+    data << uint32(sound_id);
+    if (target)
+        target->SendDirectMessage( &data );
+    else
+        SendMessageToSet( &data, true );
+}
